@@ -1,0 +1,26 @@
+name: Sync Latest Madeira
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout bcd
+        uses: actions/checkout@v4
+        with:
+          ref: bcd
+          fetch-depth: 0
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull from willfaust
+        run: |
+          git remote add upstream https://github.com/willfaust/madeira.git
+          git fetch upstream
+          git merge upstream/main --allow-unrelated-histories -m "Merged latest from willfaust"
+          git push origin bcd
