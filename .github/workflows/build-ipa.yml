@@ -405,6 +405,15 @@ jobs:
       - name: Patch wine with fault-safe waiter diagnostics
         run: python3 tools/patch-wine-waiter-read.py wine/dlls/ntdll/unix/sync.c
 
+      # Self-modifying-code fault storms (RockstarService, builds 435-437):
+      # the ARM64EC SMC path decides plain and backpatched stores without
+      # FEX's backpatch lock, and the PE ntdll's uncapped "[rtcs] pre" line is
+      # kept to 10 per second per thread (MADEIRA_RTCS_LOG=all|N).
+      - name: Check the SMC store fast path and the [rtcs] log cap
+        run: |
+          python3 tests/host/check-smc-store-fastpath.py
+          python3 tests/host/check-rtcs-cap.py
+
       - name: Build ntdll-unix
         # Keep going so one run reports every broken stage (and caches FEX and
         # LLVM). "Verify all linked archives exist" still fails the job before
@@ -1039,6 +1048,15 @@ jobs:
       - name: Patch winemetal sampler reduction
         run: python3 tools/patch-winemetal-sampler-reduction.py
 
+      # A lazy D3D12 pipeline's first draw compiles it: 35-47 ms the first time
+      # this device sees it, 0.3-0.5 ms from Metal's cache afterwards (GTA V,
+      # builds 447-451; bursts froze the game for 100-400 ms). With
+      # madeira.cfg / a game's config pso-warm = N, madeira-d3d12 hands each
+      # lazy pipeline to MadeiraCtl op 8 at creation and winemetal compiles it
+      # once on N utility queues, keeping only the cached compile. Native only.
+      - name: Patch winemetal pipeline cache warm-up
+        run: python3 tools/patch-winemetal-pso-warm.py
+
       # Is God of War at 1080p GPU-bound? The logs had no GPU timing. The
       # [frame] instrument (server_ios.c, MADEIRA_FRAME_STATS=1, off by
       # default) gets each command buffer's GPU start/end, so it can print the
@@ -1222,6 +1240,8 @@ jobs:
               raise SystemExit('Required ARM64EC branch-history module was not built; refusing the fallback IPA')
           if b'launcher-smc-v1 madeira-bcd' not in module:
               raise SystemExit('Required ARM64EC Launcher SMC module was not built; refusing the fallback IPA')
+          if b'smc-store-fastpath-v1 madeira-bcd' not in module:
+              raise SystemExit('Required ARM64EC SMC store fast-path module was not built; refusing the fallback IPA')
           print('ARM64EC rpmalloc: span4 build marker verified')
           PYEOF
           # Verify the linked x64 entries; never silently ship a fallback DLL

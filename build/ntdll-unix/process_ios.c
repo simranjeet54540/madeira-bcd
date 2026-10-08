@@ -1144,6 +1144,107 @@ static const char *child_extra_args( const char *spec, const WCHAR *image, int i
     return spec;
 }
 
+/* madeira-bcd: consoles without a window. kernelbase's alloc_console starts
+ * conhost.exe with a window unless the program asked for none
+ * (CREATE_NO_WINDOW appends --headless). In a Dock session explorer's desktop
+ * starts dockhost.exe, a console program, without a console, so it gets one
+ * with a window: build 442 (2026-10-08, both runs) had exactly one conhost,
+ * `conhost.exe --server 0x34` from dockhost's main thread at t+4 s, window
+ * 0x20056 shown at {0,0,505,434}, the "DOS window" left of the game, showing
+ * what dockhost, Valve's client in it and console children print. Social
+ * Club's helper opened one the same way when --enable-logging made Chromium
+ * call AllocConsole. On the phone it only covers the game, and painting what
+ * is written to it costs CPU, so a conhost.exe started for a console
+ * (--server) without --headless or --unix gets --headless: the console works
+ * as before (WriteConsole, modes, Ctrl handlers), only GetConsoleWindow() is
+ * NULL, as with CREATE_NO_WINDOW. Pseudo-consoles already start headless.
+ * env.MADEIRA_CONSOLE_WINDOW=1 keeps the window. Writes the new command line
+ * to `out` (`cap` WCHARs with the NUL) and returns its length, or -1 when it
+ * stays as it is. */
+static int console_headless_cmdline( const char *env, const WCHAR *image, int image_len,
+                                     const WCHAR *cl, int cl_len, WCHAR *out, int cap )
+{
+    static const char headless[] = " --headless";
+    int n = (int)sizeof(headless) - 1, k;
+
+    if ((env && env[0] == '1') || !ios_image_name_is( image, image_len, "conhost.exe" )) return -1;
+    if (sc_switch_end( cl, cl_len, "--server" ) < 0 || sc_switch_end( cl, cl_len, "--headless" ) >= 0 ||
+        sc_switch_end( cl, cl_len, "--unix" ) >= 0 || cl_len + n + 1 > cap) return -1;
+    memcpy( out, cl, cl_len * sizeof(WCHAR) );
+    for (k = 0; k < n; k++) out[cl_len + k] = (WCHAR)headless[k];
+    out[cl_len + n] = 0;
+    return cl_len + n;
+}
+
+/* madeira-bcd: the JIT pool's variables in every child's environment. The app
+ * exports WINE_IOS_JIT_RX/SIZE/RW (ContentView.swift) before Wine starts; the
+ * first process imports the Unix environment and children inherit it. The
+ * emulators read them from the Windows environment (xtajit64's and the WOW64
+ * FEX's ProcessInit: DualMap::WriteOffset = RW - RX). A service does not
+ * inherit: services.exe builds its environment from the registry
+ * (CreateEnvironmentBlock), so GTA V Enhanced's RockstarService.exe service ran
+ * without them (`[atomic-alias] LIVE: WINE_IOS_JIT_RX=<unset>`,
+ * `[DUAL_MAP_SANITY] ... WriteOffset=0x0`, in every 442 and 447 log) and its
+ * emulator wrote every translated block through the RX view of its code
+ * buffer: each store a Mach fault that the exception thread emulated. Build 447
+ * (2026-10-08 10:41 log): 1.09M emulated stores in 3.5 minutes, 99.8% into
+ * that service's 16 MB FEXMemJIT ([fault-class] blockRIP = its entry point),
+ * 45k/s at start and 3.5k/s during play, the exception thread ~20% of a core.
+ * Returns `env` (a WCHAR multi-sz) with NAME=value appended for each of
+ * `names` (ASCII, matched in any case) that it lacks and `get` (getenv) has,
+ * as a new block, its length in WCHARs (with the final NUL) in *len and the
+ * names added as bits in *added; NULL when nothing is missing or on failure. */
+static WCHAR *ios_env_with( const WCHAR *env, const char *const *names, int count,
+                            char *(*get)( const char * ), SIZE_T *len, unsigned int *added )
+{
+    const char *values[8];
+    SIZE_T used, extra = 0, o;
+    const WCHAR *p;
+    WCHAR *out;
+    int i, k;
+
+    *added = 0;
+    for (i = 0; i < count && i < 8; i++)
+    {
+        int n = (int)strlen( names[i] ), found = 0;
+
+        if (!(values[i] = get( names[i] ))) continue;
+        for (p = env; p && *p && !found; p++)
+        {
+            for (k = 0; k < n; k++)
+            {
+                WCHAR c = p[k];
+                if (c >= 'a' && c <= 'z') c -= 32;
+                if (c != (WCHAR)names[i][k]) break;   /* also stops at the entry's NUL */
+            }
+            found = (k == n && p[n] == '=');
+            while (*p) p++;   /* to this entry's NUL; the loop steps past it */
+        }
+        if (found) continue;
+        *added |= 1u << i;
+        extra += n + 1 + strlen( values[i] ) + 1;
+    }
+    if (!*added) return NULL;
+    for (p = env; p && *p; p++) while (*p) p++;
+    used = env ? (SIZE_T)(p - env) : 0;   /* every entry with its NUL, not the final NUL */
+    if (!(out = malloc( (used + extra + 1) * sizeof(WCHAR) ))) { *added = 0; return NULL; }
+    if (used) memcpy( out, env, used * sizeof(WCHAR) );
+    o = used;
+    for (i = 0; i < count && i < 8; i++)
+    {
+        const char *s;
+
+        if (!(*added & (1u << i))) continue;
+        for (s = names[i]; *s; s++) out[o++] = (WCHAR)(unsigned char)*s;
+        out[o++] = '=';
+        for (s = values[i]; *s; s++) out[o++] = (WCHAR)(unsigned char)*s;
+        out[o++] = 0;
+    }
+    out[o++] = 0;
+    *len = o;
+    return out;
+}
+
 /* The browser's new command line, written to `out` (`cap` WCHARs with the
  * NUL): `cl` with PartitionAllocBackupRefPtr put first in its last
  * --disable-features= list (Chromium uses only the last one; a second switch
@@ -1800,6 +1901,57 @@ NTSTATUS WINAPI NtCreateUserProcess( HANDLE *process_handle_ptr, HANDLE *thread_
                         "threads have no CPU area for the emulator loaded into it (it would take the app "
                         "down); the caller gets no console (env.MADEIRA_EC_CONHOST=1 starts it)\n" );
         return STATUS_ACCESS_DENIED;
+    }
+
+    /* madeira-bcd: a console's conhost.exe starts without a window (see
+     * console_headless_cmdline); env.MADEIRA_CONSOLE_WINDOW=1 keeps it. */
+    {
+        int cl_len = params->CommandLine.Length / sizeof(WCHAR), o = -1;
+        WCHAR *nbuf = malloc( (cl_len + 16) * sizeof(WCHAR) );   /* kept when used: leaks once per console, as above */
+        const char *window = getenv( "MADEIRA_CONSOLE_WINDOW" );   /* 1: consoles keep their conhost window (default: none, as with CREATE_NO_WINDOW) */
+
+        if (nbuf)
+            o = console_headless_cmdline( window, params->ImagePathName.Buffer, params->ImagePathName.Length / sizeof(WCHAR),
+                                          params->CommandLine.Buffer, cl_len, nbuf, cl_len + 16 );
+        if (o < 0) free( nbuf );
+        else
+        {
+            const RTL_USER_PROCESS_PARAMETERS *own = NtCurrentTeb()->Peb->ProcessParameters;
+            static int console_n;
+
+            params->CommandLine.Buffer = nbuf;
+            params->CommandLine.Length = o * sizeof(WCHAR);
+            params->CommandLine.MaximumLength = params->CommandLine.Length + sizeof(WCHAR);
+            if (console_n++ < 16)
+                dprintf( 2, "[console] the console of %s starts without a window (conhost --headless, as with "
+                            "CREATE_NO_WINDOW; env.MADEIRA_CONSOLE_WINDOW=1 shows it)\n",
+                         own ? debugstr_us( &own->ImagePathName ) : "?" );
+        }
+    }
+
+    /* madeira-bcd: a child without the JIT pool's variables gets the app's (see
+     * ios_env_with); env.MADEIRA_JIT_ENV_INHERIT=0 leaves its environment alone. */
+    {
+        static const char *const jit_names[] = { "WINE_IOS_JIT_RX", "WINE_IOS_JIT_SIZE", "WINE_IOS_JIT_RW" };
+        const char *keep = getenv( "MADEIRA_JIT_ENV_INHERIT" );   /* 0: a child's environment stays as its creator built it */
+        unsigned int added = 0;
+        SIZE_T len = 0;
+        WCHAR *env = (keep && keep[0] == '0') ? NULL
+                   : ios_env_with( params->Environment, jit_names, 3, getenv, &len, &added );   /* leaks once per start, as above */
+
+        if (env)
+        {
+            static int jit_env_n;
+
+            params->Environment = env;
+            params->EnvironmentSize = len * sizeof(WCHAR);
+            if (jit_env_n++ < 16)
+                dprintf( 2, "[jit-env] %s starts without the JIT pool's variables (a service gets its "
+                            "environment from the registry): added%s%s%s so its emulator writes code "
+                            "through the RW alias (env.MADEIRA_JIT_ENV_INHERIT=0 leaves it)\n",
+                         debugstr_us( &params->ImagePathName ), (added & 1) ? " WINE_IOS_JIT_RX" : "",
+                         (added & 2) ? " WINE_IOS_JIT_SIZE" : "", (added & 4) ? " WINE_IOS_JIT_RW" : "" );
+        }
     }
 
     /* madeira-bcd: Social Club's Chromium -- see sc_helper_kind. */
@@ -2976,6 +3128,61 @@ static int ios_dump_guest_instruction( HANDLE handle, LONG exit_code, uint64_t r
              memcmp( pe_bytes, copy_bytes, length ) ? "DIFFER" : "MATCH" );
     return 1;
 }
+
+/* madeira-bcd: Chromium's out-of-memory exit, seen from NtTerminateProcess.
+ * SocialClubHelper.exe raised 0xE0000008 after 24 minutes of GTA V Enhanced
+ * (log 2026-10-08 13:39:08, build 451, 14:01:51) and the game quit with it.
+ * RaiseException is dispatched in the PE ntdll and the unhandled-exception
+ * filter calls NtTerminateProcess, so the [chromium-oom] line in
+ * NtRaiseException never ran and the failed request's size was lost. The
+ * EXCEPTION_RECORD is still on the thread's stack, in RaiseException's frame:
+ * look for it in the top 256 KB (code 0xE0000008, EXCEPTION_NONCONTINUABLE, no
+ * nested record, 1-15 parameters) and print the parameters; PartitionAlloc
+ * passes the request's size and two page file figures. */
+static void ios_term_oom_record( TEB *teb )
+{
+    static uint64_t buf[8192];
+    static LONG lines;
+    uint64_t lo, hi, at;
+    int found = 0;
+
+    if (!teb || InterlockedIncrement( &lines ) > 8) return;
+    lo = (uint64_t)(ULONG_PTR)teb->Tib.StackLimit;
+    hi = (uint64_t)(ULONG_PTR)teb->Tib.StackBase;
+    if (!hi || hi <= lo) { dprintf( 2, "[chromium-oom] at exit: no stack bounds in the TEB\n" ); return; }
+    if (hi - lo > 0x40000) lo = hi - 0x40000;
+    lo &= ~(uint64_t)7;
+    for (at = lo; at < hi && !found; at += sizeof(buf) - 20 * 8)   /* chunks overlap by more than a record */
+    {
+        mach_vm_size_t got = 0;
+        uint64_t want = hi - at < sizeof(buf) ? hi - at : sizeof(buf);
+        size_t i, n;
+        if (mach_vm_read_overwrite( mach_task_self(), (mach_vm_address_t)at, want,
+                                    (mach_vm_address_t)buf, &got ) != KERN_SUCCESS || got < 64)
+            continue;
+        n = (size_t)(got / 8);
+        for (i = 0; i + 4 < n; i++)
+        {
+            uint64_t np = buf[i + 3] & 0xffffffffULL, k;
+            if ((uint32_t)buf[i] != 0xE0000008u || !((buf[i] >> 32) & 1) || buf[i + 1] || !np || np > 15
+                || i + 4 + np > n)
+                continue;
+            dprintf( 2, "[chromium-oom] at exit: record at %#llx (thread stack [%#llx,%#llx)), raised at %#llx, "
+                        "%llu parameter(s): request %#llx bytes (%llu MB)",
+                     (unsigned long long)(at + i * 8), (unsigned long long)lo, (unsigned long long)hi,
+                     (unsigned long long)buf[i + 2], (unsigned long long)np,
+                     (unsigned long long)buf[i + 4], (unsigned long long)(buf[i + 4] >> 20) );
+            for (k = 1; k < np && k < 4; k++)
+                dprintf( 2, ", %llu MB", (unsigned long long)(buf[i + 4 + k] >> 20) );
+            dprintf( 2, "\n" );
+            found = 1;
+            break;
+        }
+    }
+    if (!found)
+        dprintf( 2, "[chromium-oom] at exit: no 0xE0000008 record in the top of the thread's stack [%#llx,%#llx)\n",
+                 (unsigned long long)lo, (unsigned long long)hi );
+}
 #endif
 
 /******************************************************************************
@@ -2987,6 +3194,8 @@ NTSTATUS WINAPI NtTerminateProcess( HANDLE handle, LONG exit_code )
     BOOL self;
 
 #ifdef WINE_IOS
+    if ((unsigned int)exit_code == 0xE0000008u && handle == NtCurrentProcess())
+        ios_term_oom_record( NtCurrentTeb() );
     {
         static int term_log_count = 0;
         /* iOS-Madeira [term-stack] (task#29): also fire on ANY nonzero exit_code
