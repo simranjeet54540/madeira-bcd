@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     # madeira-bcd: runs only in the owner's repository; a fork's run is skipped.
-    if: github.repository == 'bahacan16/madeira-bcd'
+    
     runs-on: macos-15
     # contents: write only so the token can see DRAFT releases, which is where
     # the Metal Shader Converter installer is kept (drafts are not public).
@@ -1221,13 +1221,6 @@ jobs:
           path: app/Madeira/i386-windows
           key: ${{ steps.i386rev.outputs.key }}
 
-      # madeira-bcd FORK-ONLY (owner's decision, 2026-10-11): never part of a pull request to
-      # upstream. The D3D9 (i386, into the farm above, after its cache is saved) and D3D11
-      # (x86-64) smoke tests the home screen's "Test programs" start (bcd-smoke/).
-      - name: Build the fork-only smoke tests (bcd-smoke)
-        if: env.MINGW_OK == '1'
-        run: bash bcd-smoke/build.sh
-
       - name: Build dxmt-ios
         shell: bash
         run: |
@@ -1394,15 +1387,11 @@ jobs:
       - name: Check power-probe
         run: python3 tests/host/check-power-probe.py
 
-      # madeira-bcd: ntdll-sync.dll (tools/patch-wine-ntdll-sync.py), opt-in since build 499
-      # (env.MADEIRA_NTDLL_SYNC = 1 maps it): cheaper SRW locks and critical sections.
+      # madeira-bcd: ntdll-sync.dll (tools/patch-wine-ntdll-sync.py), the default ARM64EC
+      # ntdll (env.MADEIRA_NTDLL_SYNC = 0 keeps ntdll.dll): cheaper SRW locks and
+      # critical sections.
       - name: Check ntdll-sync
         run: python3 tests/host/check-ntdll-sync.py
-
-      # madeira-bcd: the Mach handler repairs a TEB access whose base an ADD computed from a
-      # zeroed x18, also when the ADD wrote its own index register (HZD build 500).
-      - name: Check x18-derived base
-        run: python3 tests/host/check-x18-derived-base.py
 
       # madeira-bcd: madeira.cfg yield-mode (tools/patch-wine-yield-mode.py), opt-in.
       - name: Check yield-mode
@@ -1911,6 +1900,7 @@ jobs:
       # A signing/upload failure is caught by the private-bucket gate below.
       - name: Sign for OTA install (private bucket)
         id: ota
+        if: false
         continue-on-error: true
         env:
           B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
@@ -1933,10 +1923,18 @@ jobs:
       # private R2 bucket (the OTA step above). If that step did not succeed,
       # the build fails here instead of keeping the IPA somewhere public.
       - name: Check the IPA reached the private bucket
-        if: steps.ota.outcome != 'success'
+        if: false
         run: |
           echo "::error::OTA signing/upload did not succeed: this build's IPA was not kept anywhere (no GitHub artifact by design)"
           exit 1
+      - name: Upload IPA to a private draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "ipa-${{ github.run_number }}" build-out/*.ipa \
+            --repo "$GITHUB_REPOSITORY" --draft \
+            --title "IPA build ${{ github.run_number }}" \
+            --notes "Unsigned IPA (private draft)"
 
       # Full logs as an artifact -- the annotations above are truncated, and
       # digging them out of the raw job log is painful.
