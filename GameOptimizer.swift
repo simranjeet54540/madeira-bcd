@@ -38,3 +38,30 @@ struct GameOptimizer {
         return settings.joined(separator: "\n") + "\n"
     }
 }
+    // 3. Settings ko safely .cfg file mein write karna
+    static func applyOptimization(for exeName: String, configHash: String) -> Bool {
+        let fileManager = FileManager.default
+        
+        // Application Support folder ka path nikalna
+        guard let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return false
+        }
+        
+        let configsFolderURL = appSupportURL.appendingPathComponent("GameConfigs")
+        let cfgFileURL = configsFolderURL.appendingPathComponent("\(configHash).cfg")
+        
+        do {
+            // Agar GameConfigs folder nahi hai toh banao
+            if !fileManager.fileExists(atPath: configsFolderURL.path) {
+                try fileManager.createDirectory(at: configsFolderURL, withIntermediateDirectories: true)
+            }
+            
+            // Optimal config text generate karke save karo
+            let configText = getOptimalConfig(for: exeName)
+            try configText.write(to: cfgFileURL, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            print("Optimization save error: \(error)")
+            return false
+        }
+    }
