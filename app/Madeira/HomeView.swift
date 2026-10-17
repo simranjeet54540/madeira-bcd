@@ -977,6 +977,8 @@ struct GameSettingsSheet: View {
     @State private var recommended: GameRecommendation?
     @State private var confirmReset = false
     @State private var prepared = false
+    @State private var phoneTuneNote = ""
+    @State private var showPhoneTune = false
 
     init(game: LibraryGame, archs: [String: String], onPlay: @escaping () -> Void, onCoverChanged: @escaping () -> Void) {
         self.game = game
@@ -1196,6 +1198,29 @@ struct GameSettingsSheet: View {
                     }
                 }
 
+               Section {
+                    NavigationLink {
+                        GameDoctorView(gameExe: GameDoctor.exeName(exePath))
+                    } label: {
+                        Label("Game Doctor (problem check)", systemImage: "stethoscope")
+                    }
+                    Button {
+                        phoneTuneNote = PhoneTuner.apply(to: profile, gameExe: GameDoctor.exeName(exePath))
+                        loadProfile()
+                        showPhoneTune = true
+                    } label: {
+                        Label("Phone ke hisaab se settings", systemImage: "wand.and.stars")
+                    }
+                    .alert("Settings lag gayi", isPresented: $showPhoneTune) {
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text(phoneTuneNote)
+                    }
+                } header: {
+                    Text("Madeira Tools")
+                } footer: {
+                    Text("Phone ki RAM, garmi aur Low Power Mode dekhkar FPS limit, MetalFX aur tessellation badalta hai. Baaki settings nahi chhuta.")
+                }
                 // Always last (GameRecommendationsApply.swift); written at once.
                 Section {
                     Button {
