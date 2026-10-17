@@ -2563,7 +2563,8 @@ static void *ios_mach_exception_thread( void *arg )
                          * so only size/opc/Rt semantics matter here. */
                         if (!emulated &&
                             ((insn & 0x3f200c00) == 0x38200800 ||   /* register offset */
-                             (insn & 0x3f200c00) == 0x38000000))    /* unscaled imm9 */
+                             (insn & 0x3f200c00) == 0x38000000 ||   /* unscaled imm9 */
+                              (insn & 0x3f000000) == 0x39000000))    /* unsigned imm12 (LDRSW, LDR, STR...) */
                         {
                             int size = (insn >> 30) & 3;   /* 0=B 1=H 2=W 3=X */
                             int opc  = (insn >> 22) & 3;   /* 0=ST 1=LD 2/3=LDS */
