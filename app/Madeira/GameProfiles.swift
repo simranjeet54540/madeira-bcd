@@ -19,6 +19,7 @@
 import Foundation
 import SwiftUI
 import UIKit
+import AVFoundation
 
 
 struct GameProfile {
@@ -894,6 +895,61 @@ enum PhoneTuner {
         text += "\n\nWajah: " + p.reasons.joined(separator: ", ")
         text += "\n\nGame band karke dobara chalao. Galat lage to Game Doctor mein 'Phone tune wapas karo' dabao."
         return text
+    }
+}
+final class AudioInterruptionGuard {
+    static let shared = AudioInterruptionGuard()
+
+    private var started = false
+    private var needsResume = false
+
+    func start() {
+        guard !started else { return }
+        started = true
+        LogStore.shared.log("[audio-guard] started")
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
+            self?.handleInterruption(n)
+        }
+        nc.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.needsResume = true
+            self?.resume(attempt: 0)
+        }
+        nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            if self?.needsResume == true { self?.resume(attempt: 0) }
+        }
+    }
+
+    private func handleInterruption(_ n: Notification) {
+        guard let raw = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        switch type {
+        case .began:
+            needsResume = true
+            LogStore.shared.log("[audio-guard] interruption began")
+        case .ended:
+            LogStore.shared.log("[audio-guard] interruption ended")
+            resume(attempt: 0)
+        @unknown default:
+            break
+        }
+    }
+
+    private func resume(attempt: Int) {
+        guard wine_process_is_running() != 0 else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            madeira_audio_resume()
+            needsResume = false
+            LogStore.shared.log("[audio-guard] session active again (try \(attempt + 1))")
+        } catch {
+            LogStore.shared.log("[audio-guard] setActive failed: \(error.localizedDescription) (try \(attempt + 1))")
+            if attempt < 4 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+                    self?.resume(attempt: attempt + 1)
+                }
+            }
+        }
     }
 }
 
