@@ -243,6 +243,9 @@ struct BCDGameSections: View {
         } footer: {
             Text("In the Shortcuts app: new shortcut, Open URLs, paste the link, then Share > Add to Home Screen.")
         }
+                madeiraToolsSection
+    }
+        private var madeiraToolsSection: some View {
         Section {
             NavigationLink {
                 GameDoctorView(windowsPath: windowsPath, onFixed: { load() })
@@ -266,8 +269,7 @@ struct BCDGameSections: View {
         } footer: {
             Text("Phone ki RAM, garmi aur Low Power Mode dekhkar FPS limit, MetalFX aur tessellation badalta hai. Baaki settings nahi chhuta.")
         }
-    }
-            
+    }        
 
 }
 
