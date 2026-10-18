@@ -245,31 +245,24 @@ struct BCDGameSections: View {
         }
                 madeiraToolsSection
     }
-        private var madeiraToolsSection: some View {
+            private var madeiraToolsSection: some View {
         Section {
+            NavigationLink {
+                PhoneSettingsView(windowsPath: windowsPath, onChanged: { load() })
+            } label: {
+                Label("Phone Settings (recommended)", systemImage: "iphone")
+            }
             NavigationLink {
                 GameDoctorView(windowsPath: windowsPath, onFixed: { load() })
             } label: {
                 Label("Game Doctor (problem check)", systemImage: "stethoscope")
             }
-            Button {
-                phoneTuneNote = PhoneTuner.apply(to: profile, gameExe: GameDoctor.exeName(windowsPath))
-                load()
-                showPhoneTune = true
-            } label: {
-                Label("Phone ke hisaab se settings", systemImage: "wand.and.stars")
-            }
-            .alert("Settings lag gayi", isPresented: $showPhoneTune) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(phoneTuneNote)
-            }
         } header: {
             Text("madeira-bcd: Madeira Tools")
         } footer: {
-            Text("Phone ki RAM, garmi aur Low Power Mode dekhkar FPS limit, MetalFX aur tessellation badalta hai. Baaki settings nahi chhuta.")
+            Text("Phone Settings: is game ke liye aapke phone ke hisaab se best settings. Game Doctor: game mein aayi problem ki jaanch aur fix.")
         }
-    }        
+    } 
 
 }
 
