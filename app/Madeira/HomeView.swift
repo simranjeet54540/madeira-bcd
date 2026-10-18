@@ -1,5 +1,4 @@
-case .session(let request):
-    ContentView(pendingLaunch: request)//
+//
 //  HomeView.swift
 //  Madeira
 //
@@ -175,15 +174,10 @@ struct RootView: View {
                 HomeView(onLaunch: { screen = .session($0) },
                          onDeveloper: { screen = .session(nil) })
             case .session(let request):
-    ContentView(pendingLaunch: request)
-        .overlay(alignment: .topLeading) { SwitchGameOverlay() }
+                ContentView(pendingLaunch: request)
             }
         }
         // The developer interface's "madeira-bcd Home" button.
-        .onAppear {
-    GameSwitcher.prepare()
-    AudioInterruptionGuard.shared.start()
-}
         .onReceive(NotificationCenter.default.publisher(for: .madeiraShowBCDHome)) { _ in
             if wine_process_is_running() == 0 { screen = .home }
         }
@@ -983,8 +977,6 @@ struct GameSettingsSheet: View {
     @State private var recommended: GameRecommendation?
     @State private var confirmReset = false
     @State private var prepared = false
-    @State private var phoneTuneNote = ""
-    @State private var showPhoneTune = false
 
     init(game: LibraryGame, archs: [String: String], onPlay: @escaping () -> Void, onCoverChanged: @escaping () -> Void) {
         self.game = game
@@ -1204,7 +1196,7 @@ struct GameSettingsSheet: View {
                     }
                 }
 
-                   // Always last (GameRecommendationsApply.swift); written at once.
+                // Always last (GameRecommendationsApply.swift); written at once.
                 Section {
                     Button {
                         confirmReset = true
