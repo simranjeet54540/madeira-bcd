@@ -1198,30 +1198,7 @@ struct GameSettingsSheet: View {
                     }
                 }
 
-               Section {
-                    NavigationLink {
-                        GameDoctorView(windowsPath: exePath, onFixed: { loadSwitches() })
-                    } label: {
-                        Label("Game Doctor (problem check)", systemImage: "stethoscope")
-                    }
-                    Button {
-                        phoneTuneNote = PhoneTuner.apply(to: profile, gameExe: GameDoctor.exeName(exePath))
-                        loadProfile()
-                        showPhoneTune = true
-                    } label: {
-                        Label("Phone ke hisaab se settings", systemImage: "wand.and.stars")
-                    }
-                    .alert("Settings lag gayi", isPresented: $showPhoneTune) {
-                        Button("OK", role: .cancel) {}
-                    } message: {
-                        Text(phoneTuneNote)
-                    }
-                } header: {
-                    Text("Madeira Tools")
-                } footer: {
-                    Text("Phone ki RAM, garmi aur Low Power Mode dekhkar FPS limit, MetalFX aur tessellation badalta hai. Baaki settings nahi chhuta.")
-                }
-                // Always last (GameRecommendationsApply.swift); written at once.
+                   // Always last (GameRecommendationsApply.swift); written at once.
                 Section {
                     Button {
                         confirmReset = true
