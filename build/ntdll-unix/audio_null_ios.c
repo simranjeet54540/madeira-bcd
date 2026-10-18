@@ -2403,3 +2403,21 @@ const void *audio_null_ios_unix_call_wow64_funcs[] = {
     ios_wow64_midi_notify_wait,        /* midi_notify_wait */
     ios_wow64_aux_message,             /* aux_message */
 };
+/* Call/Siri/alarm ke baad iOS RemoteIO unit ko rok deta hai, par g_dev.running 1 hi rehta hai,
+ * isliye ios_dev_start kabhi dobara start nahi bulata. Swift side (AudioInterruptionGuard)
+ * interruption khatam hone par isko bulata hai. */
+void madeira_audio_resume(void)
+{
+    OSStatus err;
+
+    pthread_mutex_lock(&g_dev_lock);
+    if (g_dev.au && g_dev.running) {
+        err = AudioOutputUnitStart(g_dev.au);
+        if (err) {
+            AudioOutputUnitStop(g_dev.au);
+            err = AudioOutputUnitStart(g_dev.au);
+        }
+        fprintf(stderr, "[ios_audio] madeira resume after interruption: %d\n", (int)err);
+    }
+    pthread_mutex_unlock(&g_dev_lock);
+}
