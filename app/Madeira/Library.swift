@@ -2871,6 +2871,8 @@ struct ExecutableBrowser: View {
     @Environment(\.dismiss) private var dismiss
     @State private var files: [URL] = []
     @State private var error: String?
+    @State private var phoneTuneNote = ""
+    @State private var showPhoneTune = false
     var body: some View {
         List {
             if let error { Text(error).foregroundStyle(.red) }
@@ -2977,6 +2979,19 @@ struct LibraryDetail: View {
         // A copy the library has not stored (a Steam game's first page) is a new entry.
         let isNew = !model.entries.contains { $0.id == entry.id }
         if GameRecommendations.prepare(&entry, new: isNew) { model.save(entry) }
+    }
+        /// "Phone ke hisaab se settings" fps-limit game ki file mein likhta hai; is page ka FPS picker
+    /// entry.fpsMode hai (1 = 60, 3 = 30, 4 = 40), isliye wahan bhi copy karo.
+    private func applyPhoneTuneFPS() {
+        let fps = GameProfile(windowsPath: entry.windowsPath).get("fps-limit") ?? ""
+        let mode: Int?
+        switch fps {
+        case "60": mode = 1
+        case "40": mode = 4
+        case "30": mode = 3
+        default: mode = nil
+        }
+        if let mode { entry.fpsMode = mode; model.save(entry) }
     }
     /// Reset to Recommended: the recommendation's config and switches, written at once.
     private func resetToRecommended() {
@@ -3283,6 +3298,34 @@ struct LibraryDetail: View {
                 } else if entry.desktop != true {
                     Section("Executable") { Text(entry.windowsPath).font(.caption.monospaced()).textSelection(.enabled) }
                     Section { Button("Remove from library", role: .destructive) { remove = true } }
+                }
+                                // Madeira Tools: Game Doctor + phone-aware settings.
+                if entry.desktop != true {
+                    Section {
+                        NavigationLink {
+                            GameDoctorView(windowsPath: entry.windowsPath, onFixed: { reloadBCD() })
+                        } label: {
+                            Label("Game Doctor (problem check)", systemImage: "stethoscope")
+                        }
+                        Button {
+                            phoneTuneNote = PhoneTuner.apply(to: GameProfile(windowsPath: entry.windowsPath),
+                                                             gameExe: GameDoctor.exeName(entry.windowsPath))
+                            applyPhoneTuneFPS()
+                            reloadBCD()
+                            showPhoneTune = true
+                        } label: {
+                            Label("Phone ke hisaab se settings", systemImage: "wand.and.stars")
+                        }
+                        .alert("Settings lag gayi", isPresented: $showPhoneTune) {
+                            Button("OK", role: .cancel) {}
+                        } message: {
+                            Text(phoneTuneNote)
+                        }
+                    } header: {
+                        Text("Madeira Tools")
+                    } footer: {
+                        Text("Phone ki RAM, garmi aur Low Power Mode dekhkar FPS limit aur tessellation badalta hai. Baaki settings nahi chhuta.")
+                    }
                 }
                 // madeira-bcd: always last, for every game (GameRecommendationsApply.swift).
                 if entry.desktop != true {
