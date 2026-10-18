@@ -2790,6 +2790,7 @@ struct ContentView: View {
             LogStore.shared.log("[steam-games] play app=\(appID)")
             // madeira-bcd: the game's own options (MetalFX, AVX, NVIDIA, game config) --
             // this path never reached BCDLaunch, so a Steam game ran without them.
+            AudioInterruptionGuard.shared.start()
             BCDLaunch.applyLibrary(entry, sessionLog: false)
             startDock(game, compactPool: MadeiraDockModel.shared.compactPool, profile: entry)
             return
@@ -2833,6 +2834,7 @@ struct ContentView: View {
         entry.configureLaunch()
         // madeira-bcd: the game's own options (LibraryBCD.swift); this run's
         // log is named below, by upstream's rule (the program a launch starts).
+        AudioInterruptionGuard.shared.start()
         BCDLaunch.applyLibrary(entry, sessionLog: false)
         exportBCDDesktopProfile(entry)
         // This run's log under the program's name too (Documents/logs). A Steam game started
