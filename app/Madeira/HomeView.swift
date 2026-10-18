@@ -1200,7 +1200,7 @@ struct GameSettingsSheet: View {
 
                Section {
                     NavigationLink {
-                        GameDoctorView(gameExe: GameDoctor.exeName(exePath))
+                        GameDoctorView(windowsPath: exePath, onFixed: { loadSwitches() })
                     } label: {
                         Label("Game Doctor (problem check)", systemImage: "stethoscope")
                     }
