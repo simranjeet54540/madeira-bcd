@@ -2871,8 +2871,7 @@ struct ExecutableBrowser: View {
     @Environment(\.dismiss) private var dismiss
     @State private var files: [URL] = []
     @State private var error: String?
-    @State private var phoneTuneNote = ""
-    @State private var showPhoneTune = false
+    
     var body: some View {
         List {
             if let error { Text(error).foregroundStyle(.red) }
@@ -2929,6 +2928,9 @@ struct LibraryDetail: View {
     /// Settings › Sync engine, read when the details open: the fastsync switches
     /// below only apply while it is Fastsync.
     @State private var syncEngine = SyncEngine.current
+    // 🩺 Yeh do lines yahan add karein:
+    @State private var phoneTuneNote = ""
+    @State private var showPhoneTune = false
     /// madeira-bcd: one storage for a game's own options -- where the fork keeps
     /// them and BCDLaunch exports them at every launch (library, Madeira Dock,
     /// Home Screen shortcuts, the madeira-bcd home screen): AVX, NVIDIA and Wine's
