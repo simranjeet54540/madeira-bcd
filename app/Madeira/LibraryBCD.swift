@@ -245,7 +245,7 @@ struct BCDGameSections: View {
         }
         Section {
             NavigationLink {
-                GameDoctorView(gameExe: GameDoctor.exeName(windowsPath))
+                GameDoctorView(windowsPath: windowsPath, onFixed: { load() })
             } label: {
                 Label("Game Doctor (problem check)", systemImage: "stethoscope")
             }
