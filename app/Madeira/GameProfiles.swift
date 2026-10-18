@@ -194,9 +194,7 @@ struct GameConfigEditor: View {
 // Naya error handle karna ho to neeche `rules` list mein ek DoctorRule add karo.
 // =====================================================================
 
-import Foundation
-import SwiftUI
-import UIKit
+
 
 // ---------------------------------------------------------------------
 // MARK: Fix actions (button dabane par yeh chalte hain)
