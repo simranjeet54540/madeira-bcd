@@ -118,6 +118,9 @@ struct BCDGameSections: View {
     @State private var padMode = ""
     @State private var loaded = true
     @State private var copiedLink = false
+    @State private var phoneTuneNote = ""
+    @State private var showPhoneTune = false
+
 
     init(windowsPath: String, refresh: Int = 0) {
         self.windowsPath = windowsPath
@@ -240,7 +243,32 @@ struct BCDGameSections: View {
         } footer: {
             Text("In the Shortcuts app: new shortcut, Open URLs, paste the link, then Share > Add to Home Screen.")
         }
+        Section {
+            NavigationLink {
+                GameDoctorView(gameExe: GameDoctor.exeName(windowsPath))
+            } label: {
+                Label("Game Doctor (problem check)", systemImage: "stethoscope")
+            }
+            Button {
+                phoneTuneNote = PhoneTuner.apply(to: profile, gameExe: GameDoctor.exeName(windowsPath))
+                load()
+                showPhoneTune = true
+            } label: {
+                Label("Phone ke hisaab se settings", systemImage: "wand.and.stars")
+            }
+            .alert("Settings lag gayi", isPresented: $showPhoneTune) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(phoneTuneNote)
+            }
+        } header: {
+            Text("madeira-bcd: Madeira Tools")
+        } footer: {
+            Text("Phone ki RAM, garmi aur Low Power Mode dekhkar FPS limit, MetalFX aur tessellation badalta hai. Baaki settings nahi chhuta.")
+        }
     }
+            
+
 }
 
 /// Settings › Interface: which screen Madeira starts with.
