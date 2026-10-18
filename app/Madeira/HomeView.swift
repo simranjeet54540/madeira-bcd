@@ -1,4 +1,5 @@
-//
+case .session(let request):
+    ContentView(pendingLaunch: request)//
 //  HomeView.swift
 //  Madeira
 //
@@ -174,10 +175,15 @@ struct RootView: View {
                 HomeView(onLaunch: { screen = .session($0) },
                          onDeveloper: { screen = .session(nil) })
             case .session(let request):
-                ContentView(pendingLaunch: request)
+    ContentView(pendingLaunch: request)
+        .overlay(alignment: .topLeading) { SwitchGameOverlay() }
             }
         }
         // The developer interface's "madeira-bcd Home" button.
+        .onAppear {
+    GameSwitcher.prepare()
+    AudioInterruptionGuard.shared.start()
+}
         .onReceive(NotificationCenter.default.publisher(for: .madeiraShowBCDHome)) { _ in
             if wine_process_is_running() == 0 { screen = .home }
         }
